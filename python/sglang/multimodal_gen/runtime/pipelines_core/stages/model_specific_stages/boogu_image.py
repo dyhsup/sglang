@@ -125,8 +125,18 @@ class BooguImageBeforeDenoisingStage(PipelineStage):
         input_pil_images: Optional[List[PIL.Image.Image]],
         device,
         max_sequence_length: int,
+        max_vlm_pixels: int,
+        max_vlm_side_length: int,
     ):
-        prompts = [self._apply_chat_template(instruction, input_pil_images)]
+        # IMPORTANT: Qwen3-VL expects reference images downscaled to its training
+        # spec before tokenization. Feeding full-res (e.g. 1024x1024) images
+        # corrupts the visual tokens, so the DiT never receives a correct
+        # instruction condition and the edit silently degrades to a plain
+        # re-render. Mirror Boogu's preprocess_vlm_input_pil_images.
+        vlm_images = self._resize_for_vlm(
+            input_pil_images, max_vlm_pixels, max_vlm_side_length
+        )
+        prompts = [self._apply_chat_template(instruction, vlm_images)]
         vlm_inputs = self.processor.apply_chat_template(
             prompts,
             padding="longest",
@@ -148,6 +158,28 @@ class BooguImageBeforeDenoisingStage(PipelineStage):
         feats = feats.to(dtype=dtype, device=device)
         instruction_mask = instruction_mask.to(device=device)
         return feats, instruction_mask
+
+    @staticmethod
+    def _resize_for_vlm(images, max_pixels, max_side_length, align=8):
+        """Downscale (never upscale) each PIL image to satisfy both the VLM's
+        max_pixels and max_side_length, rounding sides down to `align`.
+        Mirrors boogu image_processor.get_new_height_width."""
+        if not images:
+            return images
+        out = []
+        for im in images:
+            im = im.convert("RGB")
+            w, h = im.size
+            side_ratio = (
+                (max_side_length / max(h, w)) if max_side_length else 1.0
+            )
+            px_ratio = (max_pixels / (h * w)) ** 0.5 if max_pixels else 1.0
+            ratio = min(side_ratio, px_ratio, 1.0)
+            new_h = max(align, int(h * ratio) // align * align)
+            new_w = max(align, int(w * ratio) // align * align)
+            out.append(im.resize((new_w, new_h), PIL.Image.LANCZOS))
+        return out
+
 
     # --- reference image VAE encoding ----------------------------------------
 
@@ -193,6 +225,8 @@ class BooguImageBeforeDenoisingStage(PipelineStage):
         negative_instruction = batch.negative_prompt or ""
         max_sequence_length = getattr(sampling, "max_sequence_length", 1280)
         align_res = getattr(sampling, "align_res", True)
+        max_vlm_pixels = int(getattr(sampling, "max_vlm_input_pil_pixels", 384 * 384))
+        max_vlm_side = int(getattr(sampling, "max_vlm_input_pil_side_length", 384 * 2))
 
         assert batch.image_path is not None, "Boogu-Image ti2i requires image_path"
         input_pil_images = [
@@ -214,11 +248,13 @@ class BooguImageBeforeDenoisingStage(PipelineStage):
             assert mllm is not None
             self.mllm = mllm
             instruction_embeds, instruction_attention_mask = self._encode_instruction(
-                instruction, input_pil_images, device, max_sequence_length
+                instruction, input_pil_images, device, max_sequence_length,
+                max_vlm_pixels, max_vlm_side,
             )
             negative_instruction_embeds, negative_instruction_attention_mask = (
                 self._encode_instruction(
-                    negative_instruction, input_pil_images, device, max_sequence_length
+                    negative_instruction, input_pil_images, device,
+                    max_sequence_length, max_vlm_pixels, max_vlm_side,
                 )
             )
 
