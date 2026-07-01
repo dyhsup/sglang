@@ -386,6 +386,22 @@ class ComponentLoader(ABC):
         ):
             transformers_or_diffusers = "diffusers"
 
+        # NOTE: Boogu-Image's model_index.json points the transformer/scheduler at
+        # custom module files (e.g. "transformer_boogu",
+        # "scheduling_flow_match_euler_discrete_time_shifting") shipped inside the
+        # checkpoint. The actual class is still resolved via ModelRegistry by
+        # _class_name, so route these through the standard diffusers loaders.
+        if component_name == "transformer" and transformers_or_diffusers not in (
+            "transformers",
+            "diffusers",
+        ):
+            transformers_or_diffusers = "diffusers"
+        if component_name == "scheduler" and transformers_or_diffusers not in (
+            "transformers",
+            "diffusers",
+        ):
+            transformers_or_diffusers = "diffusers"
+
         return transformers_or_diffusers
 
     @classmethod
@@ -533,6 +549,15 @@ class PipelineComponentLoader:
             transformers_or_diffusers: Whether the component is from transformers or diffusers
             component_architecture: the class name of the module
         """
+
+        # Normalize the library string up-front so the same resolved value is
+        # used both for loader selection and for the native-load fallback. Some
+        # checkpoints (e.g. Boogu-Image) point transformer/scheduler at custom
+        # module filenames in model_index.json; the real class is resolved via
+        # ModelRegistry, so route them through the standard diffusers loaders.
+        transformers_or_diffusers = ComponentLoader.resolve_transformers_or_diffusers(
+            transformers_or_diffusers, _normalize_component_type(component_name)
+        )
 
         # Get the appropriate loader for this component type
         loader = ComponentLoader.for_component_type(

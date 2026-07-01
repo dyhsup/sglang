@@ -51,6 +51,9 @@ from sglang.multimodal_gen.configs.pipeline_configs.flux import (
     Flux2KleinPipelineConfig,
     Flux2PipelineConfig,
 )
+from sglang.multimodal_gen.configs.pipeline_configs.boogu_image import (
+    BooguImagePipelineConfig,
+)
 from sglang.multimodal_gen.configs.pipeline_configs.glm_image import (
     GlmImagePipelineConfig,
 )
@@ -106,6 +109,7 @@ from sglang.multimodal_gen.configs.sample.flux import (
     FluxSamplingParams,
 )
 from sglang.multimodal_gen.configs.sample.glmimage import GlmImageSamplingParams
+from sglang.multimodal_gen.configs.sample.boogu_image import BooguImageSamplingParams
 from sglang.multimodal_gen.configs.sample.helios import (
     HeliosDistilledSamplingParams,
     HeliosMidSamplingParams,
@@ -1092,6 +1096,12 @@ def _register_configs():
             lambda hf_id: "comfy-org/ideogram-4" in hf_id.lower(),
             lambda hf_id: "comfy-org--ideogram-4" in hf_id.lower(),
         ],
+    )
+
+    register_configs(
+        sampling_param_cls=BooguImageSamplingParams,
+        pipeline_config_cls=BooguImagePipelineConfig,
+        model_detectors=[lambda hf_id: "boogu" in hf_id.lower()],
     )
 
 

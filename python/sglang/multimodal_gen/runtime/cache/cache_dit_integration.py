@@ -31,7 +31,19 @@ from cache_dit import (
     steps_mask,
 )
 from cache_dit.caching.block_adapters import BlockAdapterRegister
-from cache_dit.parallelism import ParallelismBackend, ParallelismConfig
+
+try:
+    from cache_dit.parallelism import ParallelismBackend, ParallelismConfig
+
+    _CACHE_DIT_PARALLELISM_AVAILABLE = True
+except ImportError:
+    # Some cache_dit releases do not ship the `parallelism` submodule. It is
+    # only needed for cache_dit's own context-parallel path, which the
+    # diffusion runtime does not use by default, so degrade gracefully rather
+    # than break the whole import chain.
+    ParallelismBackend = None
+    ParallelismConfig = None
+    _CACHE_DIT_PARALLELISM_AVAILABLE = False
 
 from sglang.multimodal_gen.runtime.distributed.parallel_state import get_dit_group
 
@@ -109,7 +121,11 @@ def _build_parallelism_config(
     if sp_group is None and tp_group is None:
         return None
 
-    ulysses_size = None
+    if not _CACHE_DIT_PARALLELISM_AVAILABLE:
+        # cache_dit parallelism is unavailable in this install; skip its
+        # context-parallel config (the runtime applies its own parallelism).
+        return None
+
     ring_size = None
     if sp_group is not None:
         ulysses_size = get_ulysses_parallel_world_size()
