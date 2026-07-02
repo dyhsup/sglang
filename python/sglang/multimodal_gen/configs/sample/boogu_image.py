@@ -23,7 +23,8 @@ class BooguImageSamplingParams(SamplingParams):
     # Denoising stage. text_guidance_scale is exposed as the generic
     # guidance_scale so existing CLI/serving plumbing keeps working.
     guidance_scale: float = 4.0
-    num_inference_steps: int = 50
+    # Deployment default: steps=30 + cfg_gate_step=0.5 —— ~27s/1024, 均衡（<30s）。
+    num_inference_steps: int = 30
 
     # Boogu-specific guidance / resolution controls.
     image_guidance_scale: float = 1.0
@@ -31,7 +32,8 @@ class BooguImageSamplingParams(SamplingParams):
     teacache_rel_l1_thresh: float = 0.05
     # CFG gating：去噪轨迹后段复用已缓存的 guidance delta，减少额外 CFG 分支前向。
     # 取值为 [0,1] 的比例，例如 0.5 表示后 50% 步复用缓存 delta。1.0 = 关闭。
-    cfg_gate_step: float = 1.0
+    # 部署默认 0.5（均衡：速度↑，画质近可接受）。
+    cfg_gate_step: float = 0.5
     max_input_image_pixels: int = 2048 * 2048
     max_input_image_side_length: int = 2048 * 2
     max_vlm_input_pil_pixels: int = 384 * 384
